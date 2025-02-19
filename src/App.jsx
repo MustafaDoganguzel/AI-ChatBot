@@ -1,59 +1,123 @@
 import { useState } from 'react';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import ReactMarkdown from 'react-markdown';
 import './App.css';
-import useGemini from './hooks/useGemini';
 
 function App() {
   const [userInput, setUserInput] = useState('');
-  const { responses, loading, error, askAI } = useGemini();
+  const [responses, setResponses] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  function handleChat(event) {
+  const genAI = new GoogleGenerativeAI(
+'AIzaSyD0kTKjaI_GmhwgVpnBGeoGgdApi7G78tI'
+  );
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+  const [chat, setChat] = useState(null);
+
+  const startChat = async () => {
+    try {
+      const newChat = model.startChat({
+        history: responses.map((msg) => ({
+          role: msg.role,
+          parts: msg.content,
+        })),
+      });
+      setChat(newChat);
+      return newChat;
+    } catch (error) {
+      console.error('There is an error', error);
+      setError(error);
+      return null;
+    }
+  };
+
+  const askBot = async (prompt) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      let currentChat = chat;
+      if (!currentChat) {
+        currentChat = await startChat();
+      }
+
+      const result = await currentChat.sendMessage(prompt);
+      const response = await result.response;
+      return response.text();
+    } catch (error) {
+      setError(error);
+      console.error(error);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  async function handleChat(event) {
     event.preventDefault();
+
+    const newResponse = {
+      role: 'user',
+      content: userInput,
+    };
+    setResponses((prev) => [...prev, newResponse]);
+
+    const botResponse = await askBot(userInput);
+
+    if (botResponse) {
+      const newAssistantMessage = {
+        role: 'assistant',
+        content: botResponse,
+      };
+      setResponses((prev) => [...prev, newAssistantMessage]);
+    } else {
+      const errorMessage = {
+        role: 'assistant',
+        content: "I'm sorry, an error occurred.",
+      };
+      setResponses((prev) => [...prev, errorMessage]);
+    }
+    setUserInput('');
   }
 
   function handleChange(event) {
     const { value } = event.target;
     setUserInput(value);
-    askAI(prompt);
   }
-  if (loading) return 'Loading..';
-  if (error) return `${error} Error`;
+
   return (
     <div className="content">
       <div className="response-container">
-        <div class="response-container">
-          <div class="messageBalloon user">
-            Tell me about san-francisco in 3 sentences. use bullet points and
-            highlight important words.
+        {responses.map((response, index) => (
+          <div key={index} className={`responseBalloon ${response.role}`}>
+            {response.role === 'assistant' ? (
+              <ReactMarkdown>{response.content}</ReactMarkdown>
+            ) : (
+              response.content
+            )}
           </div>
-          <div class="messageBalloon assistant">
-            <ul>
-              <li>
-                <strong>Iconic Landmark City:</strong> San Francisco is renowned
-                for <strong>Golden Gate Bridge</strong>,{' '}
-                <strong>Alcatraz Island</strong>, and steep{' '}
-                <strong>cable cars</strong>.
-              </li>
-              <li>
-                <strong>Vibrant Culture:</strong> A <strong>melting pot</strong>{' '}
-                of diverse cultures, San Francisco boasts{' '}
-                <strong>world-class museums</strong>,{' '}
-                <strong>culinary delights</strong>, and a thriving{' '}
-                <strong>LGBTQ+ community</strong>.
-              </li>
-              <li>
-                <strong>Tech Hub:</strong> Home to{' '}
-                <strong>Silicon Valley</strong>, San Francisco is a global
-                center for <strong>innovation</strong> and technological
-                advancements.
-              </li>
-            </ul>
-          </div>
-        </div>
+        ))}
+        {isLoading && (
+          <div className="responseBalloon assistant">Loading...</div>
+        )}
+        {error && (
+          <div className="responseBalloon error">Error: {error.message}</div>
+        )}
       </div>
       <div className="input-container">
         <form onSubmit={handleChat}>
-          <input name="user-input" onChange={handleChange} value={userInput} />
-          <button>Ask</button>
+          <input
+            name="user-input"
+            onChange={handleChange}
+            value={userInput}
+            placeholder="Write prompt..."
+            disabled={isLoading}
+          />
+          <button type="submit" disabled={isLoading || !userInput.trim()}>
+            {isLoading ? 'Sending...' : 'Ask'}
+          </button>
         </form>
       </div>
     </div>
