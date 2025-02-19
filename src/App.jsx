@@ -10,7 +10,7 @@ function App() {
   const [error, setError] = useState(null);
 
   const genAI = new GoogleGenerativeAI(
-'AIzaSyD0kTKjaI_GmhwgVpnBGeoGgdApi7G78tI'
+'YOUR API KEY'
   );
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
